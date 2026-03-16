@@ -212,7 +212,7 @@ Cada ejecución genera 4 archivos en `resultados/` (o en la carpeta indicada):
 | `portfolio_optimization.png` | Pie chart de composición y gráfico de frontera eficiente |
 
 <div align="center">
-    <img src="Images/jupyter_report.png" alt="Ejemplo1" style="max-width:800px; height:auto;" />
+    <img src="images/jupyter_report.png" alt="Ejemplo1" style="max-width:800px; height:auto;" />
 </div>
 
 ---
