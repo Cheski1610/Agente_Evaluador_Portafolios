@@ -213,6 +213,7 @@ Cada ejecución genera 4 archivos en `resultados/` (o en la carpeta indicada):
 
 <div align="center">
     <img src="images/jupyter_report.png" alt="Ejemplo1" style="max-width:800px; height:auto;" />
+    <img src="images/portfolio_optimization.png" alt="Ejemplo2" style="max-width:800px; height:auto;" />
 </div>
 
 ---
