@@ -211,6 +211,11 @@ Cada ejecución genera 4 archivos en `resultados/` (o en la carpeta indicada):
 | `jupyter_report.png` | Reporte visual con 5 paneles: tabla de métricas, composición (pie), histograma de retornos, drawdown y contribución al riesgo por activo |
 | `portfolio_optimization.png` | Pie chart de composición y gráfico de frontera eficiente |
 
+<div align="center">
+    <img src="Images/jupyter_report.png" alt="Ejemplo1" style="max-width:800px; height:auto;" />
+    <img src="Images/portfolio_optimization.png" alt="Ejemplo1" style="max-width:800px; height:auto;" />
+</div>
+
 ---
 
 ### Modo portafolio propio desde Excel
