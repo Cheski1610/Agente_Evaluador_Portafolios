@@ -215,3 +215,64 @@ def load_portfolio_from_excel(path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     print(f"[INFO] Observaciones: {len(returns)} filas de retornos\n")
 
     return returns, weights_raw
+
+
+def load_prices_from_excel(path: str) -> pd.DataFrame:
+    """
+    Carga la hoja 'Precios' de un Excel y retorna los retornos calculados.
+    Usa solo la hoja 'Precios'; no requiere la hoja 'Pesos'.
+    Indicado para cuando se quiere optimizar usando datos locales.
+
+    Args:
+        path: Ruta al archivo Excel (.xlsx).
+
+    Returns:
+        DataFrame de retornos simples diarios (pct_change),
+        índice = DatetimeIndex, columnas = tickers.
+
+    Raises:
+        ValueError: Si el archivo no existe, falta la hoja 'Precios',
+                    los datos son inválidos o hay menos de 2 activos.
+    """
+    try:
+        xl = pd.ExcelFile(path)
+    except FileNotFoundError:
+        raise ValueError(f"No se encontró el archivo Excel: '{path}'")
+    except Exception as e:
+        raise ValueError(f"No se pudo leer el archivo Excel '{path}': {e}")
+
+    if "Precios" not in xl.sheet_names:
+        raise ValueError(
+            f"El archivo Excel no contiene la hoja 'Precios'. "
+            f"Hojas encontradas: {xl.sheet_names}"
+        )
+
+    prices_raw = xl.parse("Precios", index_col=0)
+    if prices_raw.empty:
+        raise ValueError("La hoja 'Precios' está vacía.")
+    try:
+        prices_raw.index = pd.to_datetime(prices_raw.index)
+    except Exception as e:
+        raise ValueError(
+            f"No se pudo convertir la primera columna de 'Precios' a fechas: {e}"
+        )
+    prices_raw.index.name = "Date"
+    prices_raw = prices_raw.apply(pd.to_numeric, errors="coerce")
+    prices_raw = prices_raw.dropna(how="all", axis=1).dropna()
+    if prices_raw.shape[1] < 2:
+        raise ValueError(
+            "La hoja 'Precios' necesita al menos 2 activos con datos válidos para optimizar."
+        )
+    if len(prices_raw) < 2:
+        raise ValueError(
+            "La hoja 'Precios' necesita al menos 2 filas con precios válidos para calcular retornos."
+        )
+
+    returns = prices_raw.pct_change().dropna()
+    tickers = prices_raw.columns.tolist()
+
+    print(f"[INFO] Precios cargados desde: {path}")
+    print(f"[INFO] Activos ({len(tickers)}): {', '.join(tickers)}")
+    print(f"[INFO] Observaciones: {len(returns)} filas de retornos\n")
+
+    return returns

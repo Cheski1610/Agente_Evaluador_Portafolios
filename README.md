@@ -12,6 +12,8 @@ Herramienta para optimización de portafolios financieros con el modelo **Mean-V
 4. [Uso sin LLM — CLI directa (`agent.py`)](#uso-sin-llm--cli-directa-agentpy)
    - [Modo optimización](#modo-optimización)
    - [Modo portafolio propio desde Excel](#modo-portafolio-propio-desde-excel)
+     - [Submodo analizar](#submodo-analizar)
+     - [Submodo optimizar](#submodo-optimizar)
 5. [Uso con LLM — Agente conversacional (`chat.py`)](#uso-con-llm--agente-conversacional-chatpy)
 6. [Módulos internos](#módulos-internos)
 7. [Referencia de parámetros](#referencia-de-parámetros)
@@ -74,12 +76,13 @@ pip install -r requirements.txt
 
 ## Uso sin LLM — CLI directa (`agent.py`)
 
-`agent.py` ofrece **dos modos de operación** que se excluyen mutuamente:
+`agent.py` ofrece **tres modos de operación** que se excluyen mutuamente:
 
 | Modo | Cuándo usarlo | Outputs |
 |---|---|---|
-| **Optimización** | Tienes los tickers y quieres obtener la asignación óptima | 4 archivos (ver abajo) |
-| **Portafolio propio** | Ya tienes un portafolio formado en Excel y quieres analizarlo | 2 archivos (ver abajo) |
+| **Optimización** (`--tickers`) | Tienes los tickers y quieres obtener la asignación óptima descargando datos de Yahoo Finance | 4 archivos |
+| **Portafolio propio — analizar** (`--portfolio-excel`) | Ya tienes precios y pesos en Excel y quieres ver métricas sin modificar la composición | 2 archivos |
+| **Portafolio propio — optimizar** (`--portfolio-excel --optimize`) | Tienes precios históricos en Excel y quieres calcular la asignación óptima y la frontera eficiente | 4 archivos |
 
 ---
 
@@ -220,18 +223,16 @@ Cada ejecución genera 4 archivos en `resultados/` (o en la carpeta indicada):
 
 ### Modo portafolio propio desde Excel
 
-Permite analizar un portafolio **ya formado**: carga los precios históricos y los pesos directamente desde un archivo Excel, sin ejecutar ninguna optimización.
+Permite trabajar con datos locales: un archivo Excel con la hoja `Precios` (y opcionalmente `Pesos`). Ofrece dos submodos:
+
+| Submodo | Flag | Requiere hojas | Outputs |
+|---|---|---|---|
+| **Analizar** | `--portfolio-excel` | `Precios` + `Pesos` | `riskfolio_report.xlsx`, `jupyter_report.png` |
+| **Optimizar** | `--portfolio-excel --optimize` | Solo `Precios` | 4 archivos (igual que modo optimización) |
 
 #### Formato del Excel de entrada
 
-El archivo debe contener exactamente dos hojas con estos nombres:
-
-| Hoja | Columna 1 | Columnas 2..N |
-|---|---|---|
-| `Precios` | Fechas (se usa como índice) | Precio de cierre de cada instrumento |
-| `Pesos` | Tickers (se usa como índice) | Peso asignado a cada instrumento (0–1) |
-
-Ejemplo de hoja `Precios`:
+##### Hoja `Precios` (requerida en ambos submodos)
 
 | Date | AAPL | MSFT | GOOGL |
 |---|---|---|---|
@@ -239,7 +240,9 @@ Ejemplo de hoja `Precios`:
 | 2022-01-04 | 179.70 | 329.51 | 2840.27 |
 | ... | ... | ... | ... |
 
-Ejemplo de hoja `Pesos`:
+Primera columna = fechas (índice), columnas restantes = precio de cierre de cada instrumento.
+
+##### Hoja `Pesos` (solo requerida para el submodo analizar)
 
 | Ticker | Peso |
 |---|---|
@@ -247,56 +250,157 @@ Ejemplo de hoja `Pesos`:
 | MSFT | 0.30 |
 | GOOGL | 0.20 |
 
-#### Sintaxis
+Primera columna = tickers (índice), segunda columna = pesos entre 0 y 1.
+
+---
+
+#### Submodo analizar
+
+Usa los pesos definidos en la hoja `Pesos` tal como están. No ejecuta ninguna optimización.
 
 ```bash
 python -X utf8 agent.py --portfolio-excel FILE.xlsx [--rf TASA] [--save-plot DIR]
 ```
 
-#### Ejemplos
-
-**Análisis básico (resultados en `resultados/`):**
+**Ejemplo básico:**
 
 ```bash
 python -X utf8 agent.py --portfolio-excel mi_cartera.xlsx
 ```
 
-**Con tasa libre del 5% y carpeta de salida personalizada:**
+**Con tasa libre del 4% y carpeta de salida personalizada:**
 
 ```bash
 python -X utf8 agent.py \
   --portfolio-excel mi_cartera.xlsx \
-  --rf 0.05 \
+  --rf 0.04 \
   --save-plot mis_resultados/
 ```
 
-#### Archivos generados (modo portafolio propio)
-
-| Archivo | Descripción |
-|---|---|
-| `riskfolio_report.xlsx` | Reporte completo de Riskfolio-Lib (8 hojas: métricas de riesgo/retorno, retornos acumulados, drawdowns, etc.) |
-| `jupyter_report.png` | Reporte visual con 5 paneles: tabla de métricas, composición (pie), histograma de retornos, drawdown y contribución al riesgo por activo |
-
-#### Salida en consola
+**Salida en consola:**
 
 ```
 =======================================================
   ANÁLISIS DE PORTAFOLIO DESDE EXCEL
 =======================================================
   Archivo       : mi_cartera.xlsx
-  Tasa libre    : 5.00%
+  Tasa libre    : 4.00%
   Carpeta salida: resultados/
 =======================================================
 
 [INFO] Portafolio cargado desde: mi_cartera.xlsx
 [INFO] Activos (3): AAPL, MSFT, GOOGL
-[INFO] Observaciones: 781 filas de retornos
+[INFO] Observaciones: 751 filas de retornos
 
 [INFO] Reporte Riskfolio guardado en: resultados\riskfolio_report.xlsx
 [INFO] Reporte visual Riskfolio guardado en: resultados\jupyter_report.png
 
 [OK] Reportes generados en: resultados/
 ```
+
+**Archivos generados:**
+
+| Archivo | Descripción |
+|---|---|
+| `riskfolio_report.xlsx` | Reporte completo de Riskfolio-Lib (8 hojas: métricas de riesgo/retorno, retornos acumulados, drawdowns, etc.) |
+| `jupyter_report.png` | Reporte visual con 5 paneles: tabla de métricas, composición (pie), histograma de retornos, drawdown y contribución al riesgo por activo |
+
+---
+
+#### Submodo optimizar
+
+Usa solo la hoja `Precios` para calcular los retornos y ejecutar la optimización Mean-Variance. Genera los mismos 4 archivos que el modo optimización estándar, incluyendo la frontera eficiente. La hoja `Pesos` (si existe) es ignorada.
+
+Acepta todos los parámetros de optimización: `--objective`, `--risk-measure`, `--rf`, `--allow-short`, `--max-weight`.
+
+```bash
+python -X utf8 agent.py --portfolio-excel FILE.xlsx --optimize [opciones de optimización] [--save-plot DIR]
+```
+
+**Ejemplo básico:**
+
+```bash
+python -X utf8 agent.py --portfolio-excel mi_cartera.xlsx --optimize
+```
+
+**Maximizar Sharpe con tasa libre del 4%:**
+
+```bash
+python -X utf8 agent.py \
+  --portfolio-excel mi_cartera.xlsx \
+  --optimize \
+  --objective sharpe \
+  --rf 0.04 \
+  --save-plot mis_resultados/
+```
+
+**Minimizar riesgo limitando la concentración al 30% por activo:**
+
+```bash
+python -X utf8 agent.py \
+  --portfolio-excel mi_cartera.xlsx \
+  --optimize \
+  --objective min_risk \
+  --max-weight 0.30 \
+  --no-plot
+```
+
+**Salida en consola:**
+
+```
+=======================================================
+  OPTIMIZACIÓN DESDE EXCEL — MEAN-VARIANCE
+=======================================================
+  Archivo       : mi_cartera.xlsx
+  Objetivo      : sharpe
+  Medida riesgo : MV
+  Tasa libre    : 4.00%
+  Peso max/activo: 50%
+  Solo largo    : True
+  Carpeta salida: resultados/
+=======================================================
+
+[INFO] Precios cargados desde: mi_cartera.xlsx
+[INFO] Activos (3): AAPL, GOOGL, MSFT
+[INFO] Observaciones: 751 filas de retornos
+
+[INFO] Ejecutando optimización...
+
+=======================================================
+  PORTAFOLIO ÓPTIMO — ASIGNACIÓN DE PESOS
+=======================================================
+  Activo     Peso (%)
+  --------------------
+  AAPL        50.0000
+  GOOGL       30.5617
+  MSFT        19.4383
+  --------------------
+  TOTAL      100.0000
+
+=======================================================
+  MÉTRICAS (ANUALIZADAS)
+=======================================================
+  Retorno Esperado (anual)          0.1455
+  Volatilidad (anual)               0.2561
+  Sharpe Ratio                      0.4121
+=======================================================
+
+[INFO] Resultados exportados a: resultados\portafolio.xlsx
+[INFO] Reporte Riskfolio guardado en: resultados\riskfolio_report.xlsx
+[INFO] Reporte visual Riskfolio guardado en: resultados\jupyter_report.png
+[INFO] Gráfico guardado en: resultados\portfolio_optimization.png
+
+[OK] Reportes generados en: resultados/
+```
+
+**Archivos generados:**
+
+| Archivo | Descripción |
+|---|---|
+| `portafolio.xlsx` | Pesos óptimos, métricas anualizadas y retornos históricos (3 hojas) |
+| `riskfolio_report.xlsx` | Reporte completo de Riskfolio-Lib (8 hojas: CAGR, Sharpe, VaR, CVaR, EVaR, MaxDrawdown, etc.) |
+| `jupyter_report.png` | Reporte visual con 5 paneles: tabla de métricas, composición (pie), histograma de retornos, drawdown y contribución al riesgo por activo |
+| `portfolio_optimization.png` | Pie chart de composición y gráfico de frontera eficiente |
 
 ---
 
@@ -356,6 +460,10 @@ Tú: Ningún activo puede superar el 30% en mi portafolio de NVDA, META, AAPL y 
 Tú: Analiza mi portafolio en cartera.xlsx con tasa libre del 4%
 
 Tú: Genera el reporte de mis posiciones actuales en datos/mi_portafolio.xlsx
+
+Tú: Optimiza mi portafolio usando los precios en datos/cartera.xlsx
+
+Tú: Calcula la frontera eficiente con los datos de mi_cartera.xlsx, objetivo min_risk
 ```
 
 ### Comportamiento por defecto del agente
@@ -377,9 +485,9 @@ Cuando el usuario no especifica algún parámetro, el agente asume:
 
 | Herramienta | Cuándo se activa |
 |---|---|
-| `optimize_portfolio` | Cuando el usuario pide optimizar, armar o construir un portafolio con tickers |
+| `optimize_portfolio` | Cuando el usuario pide optimizar, armar o construir un portafolio con tickers descargados de Yahoo Finance |
 | `get_price_summary` | Cuando el usuario quiere comparar, explorar o ver estadísticas de activos individuales |
-| `analyze_existing_portfolio` | Cuando el usuario indica un archivo Excel con un portafolio ya formado y pide analizarlo o generar reportes |
+| `analyze_existing_portfolio` | Cuando el usuario indica un archivo Excel local con datos de su portafolio, ya sea para analizar los pesos actuales o para optimizar usando esos precios |
 
 Los resultados se guardan **siempre** en `resultados/` por defecto. Si el usuario indica otra carpeta, el agente la usa como destino.
 
@@ -389,11 +497,19 @@ Los resultados se guardan **siempre** en `resultados/` por defecto. Si el usuari
 - `jupyter_report.png` — reporte visual con 5 paneles: tabla de métricas, composición (pie), histograma de retornos, drawdown y contribución al riesgo
 - `portfolio_optimization.png` — pie chart de composición y frontera eficiente
 
-**`analyze_existing_portfolio`** genera 2 archivos:
+**`analyze_existing_portfolio`** tiene dos modos seleccionables con el parámetro `optimize`:
+
+Con `optimize=false` (default) — analiza los pesos del Excel tal como están, genera 2 archivos:
 - `riskfolio_report.xlsx` — reporte completo de Riskfolio-Lib
 - `jupyter_report.png` — reporte visual con 5 paneles
 
-> El Excel de entrada debe tener las hojas `Precios` (fechas + precios) y `Pesos` (tickers + pesos). Ver el [formato detallado](#formato-del-excel-de-entrada).
+Con `optimize=true` — optimiza usando los precios del Excel, genera los 4 archivos:
+- `portafolio.xlsx` — pesos óptimos, métricas y retornos históricos
+- `riskfolio_report.xlsx` — reporte completo de Riskfolio-Lib
+- `jupyter_report.png` — reporte visual con 5 paneles
+- `portfolio_optimization.png` — pie chart de composición y frontera eficiente
+
+> Para el modo `optimize=false` el Excel debe tener las hojas `Precios` y `Pesos`. Para `optimize=true` solo se requiere la hoja `Precios`. Ver el [formato detallado](#formato-del-excel-de-entrada).
 
 ---
 
@@ -407,6 +523,7 @@ Los resultados se guardan **siempre** en `resultados/` por defecto. Si el usuari
 | `compute_returns(prices, method)` | Calcula retornos `simple` (porcentuales) o `log` (logarítmicos). Elimina NaN. |
 | `default_date_range(years)` | Devuelve el rango de fechas por defecto: fin = último día hábil del mes anterior, inicio = `years` años antes. |
 | `load_portfolio_from_excel(path)` | Carga un portafolio pre-formado desde un Excel con hojas `Precios` y `Pesos`. Devuelve `(returns, weights)`. Valida que los tickers de pesos existan en precios. |
+| `load_prices_from_excel(path)` | Carga solo la hoja `Precios` de un Excel. Devuelve `returns`. Requiere ≥2 activos. Usado por el submodo `--optimize`. |
 
 ### `src/optimizer.py` — Optimización Mean-Variance
 

@@ -14,8 +14,8 @@ Argumentos clave
   --tickers          Símbolos bursátiles separados por espacio (mín. 2)
   --start            Fecha de inicio  (YYYY-MM-DD)
   --end              Fecha de fin     (YYYY-MM-DD)
-  --portfolio-excel  Ruta a un Excel con hojas "Precios" y "Pesos"
-                     para analizar un portafolio ya formado (excluye --tickers/--start)
+  --portfolio-excel  Ruta a un Excel con hoja "Precios" (y opcionalmente "Pesos")
+                     para analizar o, con --optimize, optimizar usando datos locales
   --objective        sharpe | min_risk | max_ret | utility  (default: sharpe)
   --risk-measure     MV | MAD | CVaR                        (default: MV)
   --rf               Tasa libre de riesgo anualizada        (default: 0.0)
@@ -43,6 +43,7 @@ from src.data import (
     compute_returns,
     default_date_range,
     load_portfolio_from_excel,
+    load_prices_from_excel,
 )
 from src.optimizer import build_portfolio, optimize, compute_metrics
 from src.report import print_weights, plot_portfolio, save_to_excel, save_riskfolio_report, save_jupyter_report
@@ -93,10 +94,21 @@ def parse_args() -> argparse.Namespace:
         default=None,
         metavar="FILE.xlsx",
         help=(
-            "Ruta a un Excel con hojas 'Precios' (fechas + precios) y "
-            "'Pesos' (tickers + pesos). Genera riskfolio_report.xlsx y "
-            "jupyter_report.png en --save-plot. "
-            "Mutuamente excluyente con --tickers/--start."
+            "Ruta a un Excel con hoja 'Precios' (fechas + precios). "
+            "Sin --optimize: también requiere hoja 'Pesos' y genera "
+            "riskfolio_report.xlsx y jupyter_report.png. "
+            "Con --optimize: solo necesita 'Precios' y genera los 4 outputs "
+            "del modo optimización. Mutuamente excluyente con --tickers/--start."
+        ),
+    )
+    parser.add_argument(
+        "--optimize",
+        action="store_true",
+        help=(
+            "Junto con --portfolio-excel: optimiza el portafolio usando los "
+            "precios del Excel en lugar de los pesos predefinidos. "
+            "Genera portafolio.xlsx, riskfolio_report.xlsx, "
+            "jupyter_report.png y portfolio_optimization.png."
         ),
     )
 
@@ -156,33 +168,86 @@ def parse_args() -> argparse.Namespace:
 
 
 def _run_excel_portfolio(args: argparse.Namespace) -> None:
-    """Modo análisis de portafolio pre-formado desde Excel."""
-    print("\n" + "=" * 55)
-    print("  ANÁLISIS DE PORTAFOLIO DESDE EXCEL")
-    print("=" * 55)
-    print(f"  Archivo       : {args.portfolio_excel}")
-    print(f"  Tasa libre    : {args.rf:.2%}")
-    print(f"  Carpeta salida: {args.save_plot}")
-    print("=" * 55 + "\n")
-
-    returns, weights = load_portfolio_from_excel(args.portfolio_excel)
-
+    """Modo análisis o optimización de portafolio desde Excel."""
     out_dir = Path(args.save_plot)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    save_riskfolio_report(
-        weights=weights,
-        returns=returns,
-        output_path=str(out_dir / "riskfolio_report"),
-        risk_free_rate=args.rf,
-    )
-    save_jupyter_report(
-        weights=weights,
-        returns=returns,
-        output_path=str(out_dir / "jupyter_report.png"),
-        risk_free_rate=args.rf,
-        risk_measure="MV",
-    )
+    if args.optimize:
+        # ── Submodo: optimización con precios del Excel ───────────────────────
+        print("\n" + "=" * 55)
+        print("  OPTIMIZACIÓN DESDE EXCEL — MEAN-VARIANCE")
+        print("=" * 55)
+        print(f"  Archivo       : {args.portfolio_excel}")
+        print(f"  Objetivo      : {args.objective}")
+        print(f"  Medida riesgo : {args.risk_measure}")
+        print(f"  Tasa libre    : {args.rf:.2%}")
+        print(f"  Peso max/activo: {args.max_weight:.0%}")
+        print(f"  Solo largo    : {not args.allow_short}")
+        print(f"  Carpeta salida: {args.save_plot}")
+        print("=" * 55 + "\n")
+
+        returns = load_prices_from_excel(args.portfolio_excel)
+
+        print("[INFO] Ejecutando optimización...\n")
+        port = build_portfolio(returns)
+        weights = optimize(
+            port=port,
+            objective=args.objective,
+            risk_measure=args.risk_measure,
+            risk_free_rate=args.rf,
+            long_only=not args.allow_short,
+            max_weight=args.max_weight,
+        )
+        metrics = compute_metrics(weights, returns, risk_free_rate=args.rf)
+        print_weights(weights, metrics)
+
+        save_to_excel(weights, metrics, returns, str(out_dir / "portafolio.xlsx"))
+        save_riskfolio_report(
+            weights=weights,
+            returns=returns,
+            output_path=str(out_dir / "riskfolio_report"),
+            risk_free_rate=args.rf,
+        )
+        save_jupyter_report(
+            weights=weights,
+            returns=returns,
+            output_path=str(out_dir / "jupyter_report.png"),
+            risk_free_rate=args.rf,
+            risk_measure=args.risk_measure,
+        )
+        plot_portfolio(
+            weights=weights,
+            port=port,
+            risk_measure=args.risk_measure,
+            output_dir=str(out_dir),
+            show=not args.no_plot,
+        )
+
+    else:
+        # ── Submodo: análisis con pesos predefinidos ──────────────────────────
+        print("\n" + "=" * 55)
+        print("  ANÁLISIS DE PORTAFOLIO DESDE EXCEL")
+        print("=" * 55)
+        print(f"  Archivo       : {args.portfolio_excel}")
+        print(f"  Tasa libre    : {args.rf:.2%}")
+        print(f"  Carpeta salida: {args.save_plot}")
+        print("=" * 55 + "\n")
+
+        returns, weights = load_portfolio_from_excel(args.portfolio_excel)
+        save_riskfolio_report(
+            weights=weights,
+            returns=returns,
+            output_path=str(out_dir / "riskfolio_report"),
+            risk_free_rate=args.rf,
+        )
+        save_jupyter_report(
+            weights=weights,
+            returns=returns,
+            output_path=str(out_dir / "jupyter_report.png"),
+            risk_free_rate=args.rf,
+            risk_measure="MV",
+        )
+
     print(f"\n[OK] Reportes generados en: {out_dir}/")
 
 
@@ -199,10 +264,16 @@ def main() -> None:
             sys.exit(1)
         try:
             _run_excel_portfolio(args)
-        except ValueError as e:
+        except (ValueError, RuntimeError) as e:
             print(f"[ERROR] {e}")
             sys.exit(1)
         return
+
+    if args.optimize:
+        print(
+            "[ERROR] --optimize solo tiene efecto cuando se usa junto con --portfolio-excel."
+        )
+        sys.exit(1)
 
     # ── Modo 2: Optimización (flujo existente) ────────────────────────────────
     if not args.tickers or not args.start:

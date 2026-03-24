@@ -142,17 +142,19 @@ TOOLS: list[dict] = [
         "function": {
             "name": "analyze_existing_portfolio",
             "description": (
-                "Analiza un portafolio pre-formado cargado desde un archivo Excel. "
-                "El Excel debe contener dos hojas: "
-                "'Precios' (primera columna = Fechas como índice, columnas restantes = "
-                "precios de cada instrumento) y "
-                "'Pesos' (primera columna = tickers, segunda columna = pesos entre 0 y 1). "
-                "Genera dos archivos en output_dir: "
-                "'riskfolio_report.xlsx' con métricas detalladas de riesgo/retorno y "
-                "'jupyter_report.png' con la visualización del portafolio. "
-                "NO realiza optimización: usa los pesos tal como están en el Excel. "
-                "Usar cuando el usuario mencione un archivo Excel con su portafolio ya formado, "
-                "diga 'analiza mis posiciones actuales', 'ya tengo los pesos', o similar."
+                "Trabaja con un portafolio cargado desde un archivo Excel. "
+                "Tiene dos modos seleccionables con el parámetro 'optimize':\n"
+                "- optimize=false (default): ANÁLISIS de portafolio pre-formado. "
+                "El Excel debe tener hojas 'Precios' y 'Pesos'. "
+                "Usa los pesos tal como están; NO optimiza. "
+                "Genera: riskfolio_report.xlsx y jupyter_report.png.\n"
+                "- optimize=true: OPTIMIZACIÓN usando precios del Excel. "
+                "Solo requiere la hoja 'Precios'. Aplica Mean-Variance para "
+                "encontrar los pesos óptimos y la frontera eficiente. "
+                "Genera los 4 outputs: portafolio.xlsx, riskfolio_report.xlsx, "
+                "portfolio_optimization.png y jupyter_report.png.\n"
+                "Usar cuando el usuario mencione un archivo Excel con datos de su portafolio, "
+                "independientemente de si quiere analizar sus pesos actuales u optimizar."
             ),
             "parameters": {
                 "type": "object",
@@ -160,15 +162,36 @@ TOOLS: list[dict] = [
                     "excel_path": {
                         "type": "string",
                         "description": (
-                            "Ruta al archivo Excel (.xlsx) con las hojas 'Precios' y 'Pesos'. "
-                            "Ej: 'mi_portafolio.xlsx', 'datos/cartera_2024.xlsx'."
+                            "Ruta al archivo Excel (.xlsx). "
+                            "Con optimize=false: debe tener hojas 'Precios' y 'Pesos'. "
+                            "Con optimize=true: solo necesita la hoja 'Precios'."
+                        ),
+                    },
+                    "optimize": {
+                        "type": "boolean",
+                        "description": (
+                            "Si true, optimiza el portafolio Mean-Variance con los precios del Excel "
+                            "(ignora la hoja 'Pesos' si existe) y genera los 4 outputs incluyendo "
+                            "la frontera eficiente. "
+                            "Si false (default), analiza el portafolio con los pesos predefinidos en 'Pesos'."
                         ),
                     },
                     "output_dir": {
                         "type": "string",
                         "description": (
-                            "Carpeta donde guardar riskfolio_report.xlsx y jupyter_report.png. "
+                            "Carpeta donde guardar los archivos generados. "
                             "Si el usuario no indica carpeta, usar 'resultados/'."
+                        ),
+                    },
+                    "objective": {
+                        "type": "string",
+                        "enum": ["sharpe", "min_risk", "max_ret", "utility"],
+                        "description": (
+                            "Objetivo de optimización (solo aplica cuando optimize=true). "
+                            "'sharpe' maximiza el Sharpe Ratio (default), "
+                            "'min_risk' minimiza la varianza, "
+                            "'max_ret' maximiza el retorno, "
+                            "'utility' maximiza la utilidad cuadrática."
                         ),
                     },
                     "risk_free_rate": {
@@ -182,10 +205,25 @@ TOOLS: list[dict] = [
                         "type": "string",
                         "enum": ["MV", "MAD", "CVaR"],
                         "description": (
-                            "Medida de riesgo para el panel de contribución al riesgo "
-                            "en jupyter_report.png: 'MV' varianza (default), "
+                            "Medida de riesgo: 'MV' varianza (default), "
                             "'MAD' desviación media absoluta, "
-                            "'CVaR' valor en riesgo condicional."
+                            "'CVaR' valor en riesgo condicional. "
+                            "Con optimize=true también controla la optimización."
+                        ),
+                    },
+                    "allow_short": {
+                        "type": "boolean",
+                        "description": (
+                            "Solo aplica cuando optimize=true. "
+                            "Si true, permite posiciones cortas. Por defecto false."
+                        ),
+                    },
+                    "max_weight": {
+                        "type": "number",
+                        "description": (
+                            "Solo aplica cuando optimize=true. "
+                            "Peso máximo permitido por activo, entre 0 y 1. "
+                            "Por defecto 0.5 (50%)."
                         ),
                     },
                 },
@@ -360,66 +398,146 @@ def _tool_get_price_summary(args: dict) -> str:
 
 
 def _tool_analyze_existing_portfolio(args: dict) -> str:
-    """Carga un portafolio pre-formado desde Excel y genera reportes Riskfolio."""
+    """Carga un portafolio desde Excel y lo analiza o lo optimiza según el flag 'optimize'."""
     sys.path.insert(0, str(Path(__file__).parent.parent))
-    from src.data import load_portfolio_from_excel
+    from src.data import load_portfolio_from_excel, load_prices_from_excel
     from src.report import save_riskfolio_report, save_jupyter_report
 
     excel_path   = args["excel_path"]
+    do_optimize  = bool(args.get("optimize", False))
     output_dir   = args.get("output_dir") or "resultados/"
     rf           = float(args.get("risk_free_rate", 0.0))
     risk_measure = args.get("risk_measure", "MV")
 
-    old_stdout = sys.stdout
-    sys.stdout = buffer = io.StringIO()
-
-    try:
-        returns, weights = load_portfolio_from_excel(excel_path)
-    except ValueError as e:
-        sys.stdout = old_stdout
-        return f"ERROR al cargar el portafolio desde Excel: {e}"
-    except Exception as e:
-        sys.stdout = old_stdout
-        return f"ERROR inesperado al leer '{excel_path}': {e}"
-    finally:
-        sys.stdout = old_stdout
-
-    logs = buffer.getvalue()
-    saved_files: list[str] = []
-
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
 
-    report_path = str(out / "riskfolio_report")
-    try:
-        save_riskfolio_report(weights, returns, report_path, risk_free_rate=rf)
-        saved_files.append(report_path + ".xlsx")
-    except Exception as e:
-        logs += f"\n[WARNING] No se pudo generar riskfolio_report: {e}"
+    if do_optimize:
+        # ── Modo optimización ─────────────────────────────────────────────────
+        from src.data import load_prices_from_excel
+        from src.optimizer import build_portfolio, optimize, compute_metrics
+        from src.report import save_to_excel, plot_portfolio
 
-    jupyter_path = str(out / "jupyter_report.png")
-    try:
-        save_jupyter_report(
-            weights, returns, jupyter_path,
-            risk_free_rate=rf,
-            risk_measure=risk_measure,
-        )
-        saved_files.append(jupyter_path)
-    except Exception as e:
-        logs += f"\n[WARNING] No se pudo generar jupyter_report: {e}"
+        objective  = args.get("objective", "sharpe")
+        allow_short = bool(args.get("allow_short", False))
+        max_weight  = float(args.get("max_weight", 0.5))
 
-    tickers = weights.index.tolist()
-    result_lines = [
-        f"Análisis completado para portafolio en: {excel_path}",
-        f"Activos analizados ({len(tickers)}): {', '.join(tickers)}",
-        f"Observaciones: {len(returns)} días de retornos",
-        f"Tasa libre de riesgo: {rf:.2%}",
-        f"Medida de riesgo (jupyter_report): {risk_measure}",
-        "",
-        "COMPOSICIÓN DEL PORTAFOLIO:",
-    ]
-    for ticker, row in weights.iterrows():
-        result_lines.append(f"  {ticker}: {float(row['weights']) * 100:.4f}%")
+        old_stdout = sys.stdout
+        sys.stdout = buffer = io.StringIO()
+        try:
+            returns = load_prices_from_excel(excel_path)
+            port = build_portfolio(returns)
+            weights = optimize(
+                port=port,
+                objective=objective,
+                risk_measure=risk_measure,
+                risk_free_rate=rf,
+                long_only=not allow_short,
+                max_weight=max_weight,
+            )
+            metrics = compute_metrics(weights, returns, risk_free_rate=rf)
+        except ValueError as e:
+            sys.stdout = old_stdout
+            return f"ERROR al cargar precios desde Excel: {e}"
+        except RuntimeError as e:
+            sys.stdout = old_stdout
+            return f"ERROR en optimización: {e}"
+        finally:
+            sys.stdout = old_stdout
+
+        logs = buffer.getvalue()
+        saved_files: list[str] = []
+
+        try:
+            save_to_excel(weights, metrics, returns, str(out / "portafolio.xlsx"))
+            saved_files.append(str(out / "portafolio.xlsx"))
+        except Exception as e:
+            logs += f"\n[WARNING] No se pudo guardar portafolio.xlsx: {e}"
+
+        try:
+            plot_portfolio(weights, port, risk_measure, output_dir=str(out), show=False)
+            saved_files.append(str(out / "portfolio_optimization.png"))
+        except Exception as e:
+            logs += f"\n[WARNING] No se pudo generar portfolio_optimization.png: {e}"
+
+        try:
+            save_riskfolio_report(weights, returns, str(out / "riskfolio_report"), risk_free_rate=rf)
+            saved_files.append(str(out / "riskfolio_report.xlsx"))
+        except Exception as e:
+            logs += f"\n[WARNING] No se pudo generar riskfolio_report: {e}"
+
+        try:
+            save_jupyter_report(weights, returns, str(out / "jupyter_report.png"),
+                                risk_free_rate=rf, risk_measure=risk_measure)
+            saved_files.append(str(out / "jupyter_report.png"))
+        except Exception as e:
+            logs += f"\n[WARNING] No se pudo generar jupyter_report.png: {e}"
+
+        w_nonzero = weights[weights.iloc[:, 0] > 0.0001].copy()
+        w_nonzero.columns = ["peso"]
+        w_nonzero = w_nonzero.sort_values("peso", ascending=False)
+
+        result_lines = [
+            f"Optimización completada para portafolio en: {excel_path}",
+            f"Objetivo: {objective} | Medida de riesgo: {risk_measure}",
+            f"Restricción: peso máximo por activo = {max_weight:.0%}",
+            "",
+            "PESOS ÓPTIMOS:",
+        ]
+        for ticker, row in w_nonzero.iterrows():
+            result_lines.append(f"  {ticker}: {row['peso']*100:.4f}%")
+        result_lines += [
+            "",
+            "MÉTRICAS ANUALIZADAS:",
+            f"  Retorno esperado : {metrics['Retorno Esperado (anual)']:.4f} "
+            f"({metrics['Retorno Esperado (anual)']:.2%})",
+            f"  Volatilidad      : {metrics['Volatilidad (anual)']:.4f} "
+            f"({metrics['Volatilidad (anual)']:.2%})",
+            f"  Sharpe Ratio     : {metrics['Sharpe Ratio']:.4f}",
+        ]
+
+    else:
+        # ── Modo análisis (pesos predefinidos) ────────────────────────────────
+        old_stdout = sys.stdout
+        sys.stdout = buffer = io.StringIO()
+        try:
+            returns, weights = load_portfolio_from_excel(excel_path)
+        except ValueError as e:
+            sys.stdout = old_stdout
+            return f"ERROR al cargar el portafolio desde Excel: {e}"
+        except Exception as e:
+            sys.stdout = old_stdout
+            return f"ERROR inesperado al leer '{excel_path}': {e}"
+        finally:
+            sys.stdout = old_stdout
+
+        logs = buffer.getvalue()
+        saved_files: list[str] = []
+
+        try:
+            save_riskfolio_report(weights, returns, str(out / "riskfolio_report"), risk_free_rate=rf)
+            saved_files.append(str(out / "riskfolio_report.xlsx"))
+        except Exception as e:
+            logs += f"\n[WARNING] No se pudo generar riskfolio_report: {e}"
+
+        try:
+            save_jupyter_report(weights, returns, str(out / "jupyter_report.png"),
+                                risk_free_rate=rf, risk_measure=risk_measure)
+            saved_files.append(str(out / "jupyter_report.png"))
+        except Exception as e:
+            logs += f"\n[WARNING] No se pudo generar jupyter_report.png: {e}"
+
+        tickers = weights.index.tolist()
+        result_lines = [
+            f"Análisis completado para portafolio en: {excel_path}",
+            f"Activos analizados ({len(tickers)}): {', '.join(tickers)}",
+            f"Observaciones: {len(returns)} días de retornos",
+            f"Tasa libre de riesgo: {rf:.2%}",
+            "",
+            "COMPOSICIÓN DEL PORTAFOLIO:",
+        ]
+        for ticker, row in weights.iterrows():
+            result_lines.append(f"  {ticker}: {float(row['weights']) * 100:.4f}%")
 
     if saved_files:
         result_lines.append("")
@@ -484,18 +602,26 @@ REGLAS PARA GUARDAR RESULTADOS:
 - Siempre incluye el parámetro output_dir al llamar a optimize_portfolio o analyze_existing_portfolio.
 - Si el usuario especifica una carpeta o ruta, úsala como output_dir.
 - Si el usuario NO especifica carpeta, usa output_dir='resultados/' como valor por defecto.
-- optimize_portfolio guarda: portafolio.xlsx, riskfolio_report.xlsx, portfolio_optimization.png, jupyter_report.png.
-- analyze_existing_portfolio guarda: riskfolio_report.xlsx, jupyter_report.png.
+- optimize_portfolio genera: portafolio.xlsx, riskfolio_report.xlsx, portfolio_optimization.png, jupyter_report.png.
+- analyze_existing_portfolio con optimize=false genera: riskfolio_report.xlsx, jupyter_report.png.
+- analyze_existing_portfolio con optimize=true genera: portafolio.xlsx, riskfolio_report.xlsx, portfolio_optimization.png, jupyter_report.png.
 - Ejemplos de rutas indicadas por el usuario:
     'guarda en mis_datos/' → output_dir='mis_datos/'
     'exporta a output/'    → output_dir='output/'
     'salva en análisis/'   → output_dir='análisis/'
 
 CUÁNDO USAR analyze_existing_portfolio (en lugar de optimize_portfolio):
-- Cuando el usuario mencione un archivo Excel con su portafolio ya formado.
-- Cuando diga 'analiza mi portafolio', 'ya tengo los pesos', 'mis posiciones actuales'.
-- Cuando indique una ruta .xlsx y pida análisis, reportes o métricas sin optimizar.
-- Ejemplos: 'analiza el archivo cartera.xlsx', 'genera el reporte de mi portafolio en datos/portfolio.xlsx'."""
+- Siempre que el usuario mencione un archivo Excel con datos de su portafolio.
+- Con optimize=false: cuando diga 'analiza mi portafolio', 'ya tengo los pesos',
+  'mis posiciones actuales', o pida reportes sin optimizar.
+- Con optimize=true: cuando pida 'optimiza usando los precios de mi Excel',
+  'calcula la frontera eficiente con estos datos', 'optimiza mi cartera local',
+  o similar referenciando un archivo local con precios.
+- Ejemplos:
+    'analiza el archivo cartera.xlsx'                       → optimize=false
+    'genera el reporte de mi portafolio en datos/port.xlsx' → optimize=false
+    'optimiza el portafolio con los precios de mi Excel'    → optimize=true
+    'calcula el portafolio óptimo usando datos/precios.xlsx'→ optimize=true"""
 
 
 class OllamaAgent:
