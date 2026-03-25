@@ -106,7 +106,7 @@ python -X utf8 agent.py --tickers T1 T2 ... --start YYYY-MM-DD [opciones]
 python -X utf8 agent.py \
   --tickers AAPL MSFT GOOGL AMZN META \
   --start 2022-01-01 \
-  --end 2024-12-31
+  --end 2025-12-31
 ```
 
 **Minimizar riesgo con tasa libre del 5%:**
@@ -115,7 +115,7 @@ python -X utf8 agent.py \
 python -X utf8 agent.py \
   --tickers AAPL MSFT GOOGL AMZN META \
   --start 2022-01-01 \
-  --end 2024-12-31 \
+  --end 2025-12-31 \
   --objective min_risk \
   --rf 0.05
 ```
@@ -126,7 +126,7 @@ python -X utf8 agent.py \
 python -X utf8 agent.py \
   --tickers JPM BAC GS MS WFC \
   --start 2021-01-01 \
-  --end 2024-12-31 \
+  --end 2025-12-31 \
   --objective sharpe \
   --risk-measure CVaR \
   --returns-method log \
@@ -141,7 +141,7 @@ python -X utf8 agent.py \
 python -X utf8 agent.py \
   --tickers NVDA AMD INTC TSM \
   --start 2023-01-01 \
-  --end 2024-12-31 \
+  --end 2025-12-31 \
   --save-plot resultados/ \
   --no-plot
 ```
@@ -152,7 +152,7 @@ python -X utf8 agent.py \
 python -X utf8 agent.py \
   --tickers AAPL MSFT GOOGL AMZN TSLA \
   --start 2022-01-01 \
-  --end 2024-12-31 \
+  --end 2025-12-31 \
   --allow-short
 ```
 
@@ -162,7 +162,7 @@ python -X utf8 agent.py \
 python -X utf8 agent.py \
   --tickers AAPL MSFT NVDA GOOGL AMZN META \
   --start 2022-01-01 \
-  --end 2024-12-31 \
+  --end 2025-12-31 \
   --max-weight 0.30
 ```
 
@@ -451,7 +451,7 @@ Tú: Compara NVDA y AMD en los últimos 2 años
 
 Tú: Arma un portafolio tech con tasa libre del 5% y guarda los resultados en resultados/
 
-Tú: Muéstrame las estadísticas de TSLA, AMZN y META durante 2024
+Tú: Muéstrame las estadísticas de TSLA, AMZN y META durante 2025
 
 Tú: Optimiza AAPL MSFT con retornos logarítmicos y medida CVaR
 
