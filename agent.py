@@ -16,6 +16,9 @@ Argumentos clave
   --end              Fecha de fin     (YYYY-MM-DD)
   --portfolio-excel  Ruta a un Excel con hoja "Precios" (y opcionalmente "Pesos")
                      para analizar o, con --optimize, optimizar usando datos locales
+  --create-portfolio-excel  Ruta del .xlsx a generar a partir de --tickers y
+                     --weights (composición dada por el usuario), listo para
+                     usarse luego con --portfolio-excel
   --objective        sharpe | min_risk | max_ret | utility  (default: sharpe)
   --risk-measure     MV | MAD | CVaR                        (default: MV)
   --rf               Tasa libre de riesgo anualizada        (default: 0.0)
@@ -44,6 +47,7 @@ from src.data import (
     default_date_range,
     load_portfolio_from_excel,
     load_prices_from_excel,
+    create_portfolio_excel,
 )
 from src.optimizer import build_portfolio, optimize, compute_metrics
 from src.report import print_weights, plot_portfolio, save_to_excel, save_riskfolio_report, save_jupyter_report
@@ -109,6 +113,29 @@ def parse_args() -> argparse.Namespace:
             "precios del Excel en lugar de los pesos predefinidos. "
             "Genera portafolio.xlsx, riskfolio_report.xlsx, "
             "jupyter_report.png y portfolio_optimization.png."
+        ),
+    )
+    parser.add_argument(
+        "--create-portfolio-excel",
+        default=None,
+        metavar="FILE.xlsx",
+        help=(
+            "Crea un Excel con hojas 'Precios' y 'Pesos' a partir de la "
+            "composición indicada con --tickers y --weights, descargando los "
+            "precios históricos del período --start/--end. El archivo generado "
+            "puede usarse luego con --portfolio-excel. Mutuamente excluyente "
+            "con --portfolio-excel."
+        ),
+    )
+    parser.add_argument(
+        "--weights",
+        nargs="+",
+        type=float,
+        default=None,
+        metavar="PESO",
+        help=(
+            "Pesos del portafolio en decimal, en el mismo orden que --tickers "
+            "(ej. 0.4 0.6 para 40%%/60%%). Requerido junto con --create-portfolio-excel."
         ),
     )
 
@@ -253,6 +280,60 @@ def _run_excel_portfolio(args: argparse.Namespace) -> None:
 
 def main() -> None:
     args = parse_args()
+
+    # ── Modo 0: Crear Excel de portafolio a partir de una composición ─────────
+    if args.create_portfolio_excel:
+        if args.portfolio_excel:
+            print(
+                "[ERROR] --create-portfolio-excel es mutuamente excluyente con "
+                "--portfolio-excel."
+            )
+            sys.exit(1)
+        if not args.tickers or not args.weights:
+            print(
+                "[ERROR] Se requieren --tickers y --weights para --create-portfolio-excel.\n"
+                "Ejemplo: python agent.py --create-portfolio-excel resultados/mi_portafolio.xlsx "
+                "--tickers AAPL MSFT --weights 0.4 0.6 --start 2022-01-01"
+            )
+            sys.exit(1)
+        if len(args.tickers) != len(args.weights):
+            print(
+                f"[ERROR] La cantidad de --tickers ({len(args.tickers)}) no coincide "
+                f"con la cantidad de --weights ({len(args.weights)})."
+            )
+            sys.exit(1)
+        if not args.start:
+            print(
+                "[ERROR] Se requiere --start para --create-portfolio-excel.\n"
+                "Ejemplo: --start 2022-01-01"
+            )
+            sys.exit(1)
+
+        tickers = [t.upper() for t in args.tickers]
+        _start_def, _end_def = default_date_range(years=3)
+        end_date = args.end or _end_def
+
+        print("\n" + "=" * 55)
+        print("  CREACIÓN DE EXCEL DE PORTAFOLIO")
+        print("=" * 55)
+        print(f"  Archivo salida: {args.create_portfolio_excel}")
+        print(f"  Activos       : {', '.join(tickers)}")
+        print(f"  Período       : {args.start} a {end_date}")
+        print("=" * 55 + "\n")
+
+        try:
+            composition = dict(zip(tickers, args.weights))
+            create_portfolio_excel(composition, args.start, end_date, args.create_portfolio_excel)
+        except ValueError as e:
+            print(f"[ERROR] {e}")
+            sys.exit(1)
+
+        print(f"\n[OK] Portafolio guardado en: {args.create_portfolio_excel}")
+        print(
+            "[INFO] Ya puedes usarlo con: "
+            f"python agent.py --portfolio-excel {args.create_portfolio_excel}"
+        )
+        return
 
     # ── Modo 1: Portafolio pre-formado desde Excel ────────────────────────────
     if args.portfolio_excel:

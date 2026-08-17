@@ -11,6 +11,7 @@ Herramienta para optimización de portafolios financieros con el modelo **Mean-V
 3. [Instalación](#instalación)
 4. [Uso sin LLM — CLI directa (`agent.py`)](#uso-sin-llm--cli-directa-agentpy)
    - [Modo optimización](#modo-optimización)
+   - [Modo crear Excel de portafolio](#modo-crear-excel-de-portafolio)
    - [Modo portafolio propio desde Excel](#modo-portafolio-propio-desde-excel)
      - [Submodo analizar](#submodo-analizar)
      - [Submodo optimizar](#submodo-optimizar)
@@ -76,11 +77,12 @@ pip install -r requirements.txt
 
 ## Uso sin LLM — CLI directa (`agent.py`)
 
-`agent.py` ofrece **tres modos de operación** que se excluyen mutuamente:
+`agent.py` ofrece **cuatro modos de operación** que se excluyen mutuamente:
 
 | Modo | Cuándo usarlo | Outputs |
 |---|---|---|
 | **Optimización** (`--tickers`) | Tienes los tickers y quieres obtener la asignación óptima descargando datos de Yahoo Finance | 4 archivos |
+| **Crear Excel de portafolio** (`--create-portfolio-excel`) | Tienes una composición (tickers + pesos) definida y quieres generar el Excel de entrada para los modos de abajo | 1 archivo |
 | **Portafolio propio — analizar** (`--portfolio-excel`) | Ya tienes precios y pesos en Excel y quieres ver métricas sin modificar la composición | 2 archivos |
 | **Portafolio propio — optimizar** (`--portfolio-excel --optimize`) | Tienes precios históricos en Excel y quieres calcular la asignación óptima y la frontera eficiente | 4 archivos |
 
@@ -218,6 +220,61 @@ Cada ejecución genera 4 archivos en `resultados/` (o en la carpeta indicada):
     <img src="images/jupyter_report.png" alt="Ejemplo1" style="max-width:800px; height:auto;" />
     <img src="images/portfolio_optimization.png" alt="Ejemplo2" style="max-width:800px; height:auto;" />
 </div>
+
+---
+
+### Modo crear Excel de portafolio
+
+Genera un archivo Excel con hojas `Precios` y `Pesos` a partir de una composición (tickers + pesos) indicada por el usuario, descargando los precios históricos de Yahoo Finance para el período indicado. El archivo resultante tiene el mismo formato que consumen los modos `--portfolio-excel` (ver [formato del Excel](#formato-del-excel-de-entrada)), por lo que queda listo para analizarlo u optimizarlo a continuación.
+
+```bash
+python -X utf8 agent.py --create-portfolio-excel FILE.xlsx --tickers T1 T2 ... --weights W1 W2 ... --start YYYY-MM-DD [--end YYYY-MM-DD]
+```
+
+- `--tickers` y `--weights` deben tener la misma cantidad de elementos y en el mismo orden (ej. `--tickers AAPL MSFT --weights 0.4 0.6` para 40%/60%).
+- Si los pesos no suman 1, se normalizan automáticamente.
+- `--end` es opcional (default: último día hábil del mes anterior).
+- Mutuamente excluyente con `--portfolio-excel`.
+
+**Ejemplo:**
+
+```bash
+python -X utf8 agent.py \
+  --create-portfolio-excel resultados/mi_portafolio.xlsx \
+  --tickers AAPL MSFT \
+  --weights 0.4 0.6 \
+  --start 2022-01-01
+```
+
+**Salida en consola:**
+
+```
+=======================================================
+  CREACIÓN DE EXCEL DE PORTAFOLIO
+=======================================================
+  Archivo salida: resultados/mi_portafolio.xlsx
+  Activos       : AAPL, MSFT
+  Período       : 2022-01-01 a 2026-07-31
+=======================================================
+
+[INFO] Descargando datos para: AAPL, MSFT
+[INFO] Activos válidos (2): AAPL, MSFT
+[INFO] Observaciones: 1147 filas
+
+[INFO] Portafolio guardado en: resultados/mi_portafolio.xlsx
+[INFO] Activos (2): AAPL, MSFT
+
+[OK] Portafolio guardado en: resultados/mi_portafolio.xlsx
+[INFO] Ya puedes usarlo con: python agent.py --portfolio-excel resultados/mi_portafolio.xlsx
+```
+
+**Archivo generado:**
+
+| Archivo | Descripción |
+|---|---|
+| `mi_portafolio.xlsx` (ruta indicada) | Hoja `Precios` (fechas + precios descargados) y hoja `Pesos` (composición indicada, ya normalizada) |
+
+> Para continuar con el análisis o la optimización, usa el archivo generado con `--portfolio-excel` (ver siguiente sección).
 
 ---
 
@@ -464,6 +521,10 @@ Tú: Genera el reporte de mis posiciones actuales en datos/mi_portafolio.xlsx
 Tú: Optimiza mi portafolio usando los precios en datos/cartera.xlsx
 
 Tú: Calcula la frontera eficiente con los datos de mi_cartera.xlsx, objetivo min_risk
+
+Tú: Crea un excel con 40% AAPL y 60% MSFT desde 2022-01-01
+
+Tú: Ahora analiza ese portafolio
 ```
 
 ### Comportamiento por defecto del agente
@@ -488,6 +549,7 @@ Cuando el usuario no especifica algún parámetro, el agente asume:
 | `optimize_portfolio` | Cuando el usuario pide optimizar, armar o construir un portafolio con tickers descargados de Yahoo Finance |
 | `get_price_summary` | Cuando el usuario quiere comparar, explorar o ver estadísticas de activos individuales |
 | `analyze_existing_portfolio` | Cuando el usuario indica un archivo Excel local con datos de su portafolio, ya sea para analizar los pesos actuales o para optimizar usando esos precios |
+| `create_portfolio_excel` | Cuando el usuario describe una composición de activos y pesos (ej. "40% AAPL, 60% MSFT") y todavía no tiene un archivo Excel con esos datos |
 
 Los resultados se guardan **siempre** en `resultados/` por defecto. Si el usuario indica otra carpeta, el agente la usa como destino.
 
@@ -511,6 +573,11 @@ Con `optimize=true` — optimiza usando los precios del Excel, genera los 4 arch
 
 > Para el modo `optimize=false` el Excel debe tener las hojas `Precios` y `Pesos`. Para `optimize=true` solo se requiere la hoja `Precios`. Ver el [formato detallado](#formato-del-excel-de-entrada).
 
+**`create_portfolio_excel`** genera 1 archivo a partir de una composición de tickers y pesos indicada por el usuario:
+- Descarga los precios históricos de Yahoo Finance para el período indicado (default: últimos 3 años).
+- Si los pesos no suman 1, se normalizan automáticamente.
+- Genera un `.xlsx` (default: `resultados/mi_portafolio.xlsx`) con las hojas `Precios` y `Pesos`, listo para encadenar con `analyze_existing_portfolio` usando ese mismo archivo como `excel_path`.
+
 ---
 
 ## Módulos internos
@@ -524,6 +591,7 @@ Con `optimize=true` — optimiza usando los precios del Excel, genera los 4 arch
 | `default_date_range(years)` | Devuelve el rango de fechas por defecto: fin = último día hábil del mes anterior, inicio = `years` años antes. |
 | `load_portfolio_from_excel(path)` | Carga un portafolio pre-formado desde un Excel con hojas `Precios` y `Pesos`. Devuelve `(returns, weights)`. Valida que los tickers de pesos existan en precios. |
 | `load_prices_from_excel(path)` | Carga solo la hoja `Precios` de un Excel. Devuelve `returns`. Requiere ≥2 activos. Usado por el submodo `--optimize`. |
+| `create_portfolio_excel(composition, start, end, output_path)` | Genera un Excel con hojas `Precios` y `Pesos` a partir de una composición `{ticker: peso}`, descargando los precios del período indicado. Normaliza los pesos si no suman 1. |
 
 ### `src/optimizer.py` — Optimización Mean-Variance
 

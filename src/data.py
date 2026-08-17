@@ -6,6 +6,7 @@ import yfinance as yf
 import pandas as pd
 import sys
 from datetime import date, timedelta
+from pathlib import Path
 
 
 def last_business_day_prev_month(reference: date | None = None) -> date:
@@ -276,3 +277,74 @@ def load_prices_from_excel(path: str) -> pd.DataFrame:
     print(f"[INFO] Observaciones: {len(returns)} filas de retornos\n")
 
     return returns
+
+
+def create_portfolio_excel(
+    composition: dict[str, float],
+    start: str,
+    end: str,
+    output_path: str,
+) -> str:
+    """
+    Crea un archivo Excel con hojas 'Precios' y 'Pesos' a partir de una
+    composición de portafolio (ticker -> peso) dada por el usuario.
+
+    Descarga los precios históricos de Yahoo Finance para el período indicado
+    y genera un archivo .xlsx compatible con `load_portfolio_from_excel` /
+    `load_prices_from_excel`, listo para usarse con `analyze_existing_portfolio`.
+
+    Args:
+        composition: Diccionario {ticker: peso}. Los pesos deben sumar ~1;
+                     si no, se normalizan automáticamente.
+        start: Fecha de inicio en formato "YYYY-MM-DD".
+        end: Fecha de fin en formato "YYYY-MM-DD".
+        output_path: Ruta del archivo .xlsx a generar.
+
+    Returns:
+        La ruta del archivo generado (`output_path`).
+
+    Raises:
+        ValueError: Si la composición está vacía, tiene pesos inválidos, o no
+                    se pudieron descargar precios para alguno de los tickers.
+    """
+    if not composition:
+        raise ValueError("La composición del portafolio no puede estar vacía.")
+
+    tickers = [t.upper() for t in composition.keys()]
+    weights = pd.Series(
+        [float(w) for w in composition.values()],
+        index=tickers,
+        name="weights",
+    )
+
+    if (weights < 0).any():
+        raise ValueError("Los pesos no pueden ser negativos.")
+
+    total = weights.sum()
+    if total <= 0:
+        raise ValueError("La suma de los pesos debe ser mayor que 0.")
+    if abs(total - 1.0) > 1e-3:
+        print(f"[WARNING] La suma de los pesos es {total:.4f}, se normalizará a 1.0.")
+        weights = weights / total
+
+    prices = download_prices(tickers, start, end)
+
+    missing = [t for t in tickers if t not in prices.columns]
+    if missing:
+        raise ValueError(
+            f"No se pudieron descargar precios para: {', '.join(missing)}. "
+            "Verifica los tickers."
+        )
+
+    weights = weights.reindex(prices.columns)
+
+    out_path = Path(output_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with pd.ExcelWriter(output_path, engine="xlsxwriter") as writer:
+        prices.to_excel(writer, sheet_name="Precios")
+        weights.to_frame().to_excel(writer, sheet_name="Pesos")
+
+    print(f"[INFO] Portafolio guardado en: {output_path}")
+    print(f"[INFO] Activos ({len(tickers)}): {', '.join(tickers)}")
+
+    return output_path

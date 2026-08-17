@@ -231,6 +231,58 @@ TOOLS: list[dict] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_portfolio_excel",
+            "description": (
+                "Crea un archivo Excel con hojas 'Precios' y 'Pesos' a partir de una "
+                "composición de portafolio (tickers y sus pesos) indicada por el usuario, "
+                "cuando el usuario todavía NO tiene un archivo Excel. "
+                "Descarga los precios históricos de Yahoo Finance para el período indicado "
+                "y genera un .xlsx compatible con 'analyze_existing_portfolio'. "
+                "Usar cuando el usuario describa una composición de activos y pesos "
+                "(ej. '40% AAPL, 60% MSFT') y pida crear, generar o guardar un Excel "
+                "de su portafolio. Si luego el usuario pide analizarlo, usa "
+                "'analyze_existing_portfolio' con la ruta del archivo generado."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tickers": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Lista de símbolos bursátiles de Yahoo Finance.",
+                    },
+                    "weights": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "description": (
+                            "Lista de pesos en decimal, en el mismo orden que 'tickers' "
+                            "(ej. [0.4, 0.6] para 40% y 60%). Deben sumar 1; si no, "
+                            "se normalizan automáticamente."
+                        ),
+                    },
+                    "start_date": {
+                        "type": "string",
+                        "description": "Fecha de inicio del período de precios en formato YYYY-MM-DD.",
+                    },
+                    "end_date": {
+                        "type": "string",
+                        "description": "Fecha de fin del período de precios en formato YYYY-MM-DD.",
+                    },
+                    "output_path": {
+                        "type": "string",
+                        "description": (
+                            "Ruta del archivo .xlsx a crear. "
+                            "Si el usuario no indica ruta, usar 'resultados/mi_portafolio.xlsx'."
+                        ),
+                    },
+                },
+                "required": ["tickers", "weights"],
+            },
+        },
+    },
 ]
 
 
@@ -548,6 +600,65 @@ def _tool_analyze_existing_portfolio(args: dict) -> str:
     return "\n".join(result_lines)
 
 
+def _tool_create_portfolio_excel(args: dict) -> str:
+    """Crea un Excel con hojas 'Precios' y 'Pesos' a partir de una composición dada por el usuario."""
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from src.data import create_portfolio_excel, default_date_range
+
+    tickers = [str(t).upper() for t in args["tickers"]]
+    weights = [float(w) for w in args["weights"]]
+
+    if len(tickers) != len(weights):
+        return (
+            f"ERROR: la cantidad de tickers ({len(tickers)}) no coincide con la "
+            f"cantidad de pesos ({len(weights)})."
+        )
+
+    start_default, end_default = default_date_range(years=3)
+    start = args.get("start_date") or start_default
+    end = args.get("end_date") or end_default
+    output_path = args.get("output_path") or "resultados/mi_portafolio.xlsx"
+
+    old_stdout = sys.stdout
+    sys.stdout = buffer = io.StringIO()
+    try:
+        create_portfolio_excel(dict(zip(tickers, weights)), start, end, output_path)
+    except ValueError as e:
+        sys.stdout = old_stdout
+        return f"ERROR al crear el Excel del portafolio: {e}"
+    except SystemExit:
+        sys.stdout = old_stdout
+        return (
+            "ERROR: no se pudieron descargar precios para los tickers indicados. "
+            "Verifica los símbolos y las fechas."
+        )
+    finally:
+        sys.stdout = old_stdout
+
+    logs = buffer.getvalue()
+
+    total = sum(weights)
+    normalized = [w / total for w in weights] if abs(total - 1.0) > 1e-3 else weights
+
+    result_lines = [
+        f"Excel de portafolio creado en: {output_path}",
+        f"Período: {start} a {end}",
+        "",
+        "COMPOSICIÓN:",
+    ]
+    for ticker, w in zip(tickers, normalized):
+        result_lines.append(f"  {ticker}: {w * 100:.2f}%")
+    result_lines += [
+        "",
+        f"El archivo ya puede usarse con analyze_existing_portfolio (excel_path='{output_path}').",
+    ]
+
+    if logs.strip():
+        result_lines += ["", "LOG:", logs.strip()]
+
+    return "\n".join(result_lines)
+
+
 # ─────────────────────────────────────────────
 # Dispatcher de herramientas
 # ─────────────────────────────────────────────
@@ -556,6 +667,7 @@ _TOOL_HANDLERS: dict[str, Any] = {
     "optimize_portfolio":         _tool_optimize_portfolio,
     "get_price_summary":          _tool_get_price_summary,
     "analyze_existing_portfolio": _tool_analyze_existing_portfolio,
+    "create_portfolio_excel":     _tool_create_portfolio_excel,
 }
 
 
@@ -586,6 +698,8 @@ Tienes acceso a herramientas que te permiten:
 - Optimizar portafolios con el modelo Mean-Variance de Markowitz usando Riskfolio-Lib
 - Mostrar estadísticas descriptivas de activos financieros
 - Analizar portafolios pre-formados cargados desde archivos Excel (sin optimizar)
+- Crear archivos Excel de portafolio a partir de una composición (tickers + pesos)
+  indicada por el usuario, listos para usarse luego con analyze_existing_portfolio
 
 Responde siempre en español. Sé conciso pero informativo al interpretar los resultados.
 Cuando el usuario mencione activos, fechas u objetivos de inversión, usa las herramientas disponibles.
@@ -621,7 +735,21 @@ CUÁNDO USAR analyze_existing_portfolio (en lugar de optimize_portfolio):
     'analiza el archivo cartera.xlsx'                       → optimize=false
     'genera el reporte de mi portafolio en datos/port.xlsx' → optimize=false
     'optimiza el portafolio con los precios de mi Excel'    → optimize=true
-    'calcula el portafolio óptimo usando datos/precios.xlsx'→ optimize=true"""
+    'calcula el portafolio óptimo usando datos/precios.xlsx'→ optimize=true
+
+CUÁNDO USAR create_portfolio_excel:
+- Cuando el usuario describa una composición de activos y pesos (ej. '40% AAPL,
+  60% MSFT') y todavía NO tenga un archivo Excel con esos datos.
+- Usa output_path='resultados/mi_portafolio.xlsx' si el usuario no indica ruta.
+- Si el usuario luego pide analizar o optimizar ese portafolio recién creado,
+  encadena con analyze_existing_portfolio usando el mismo output_path como
+  excel_path (optimize=false para analizar con esos pesos, optimize=true para
+  optimizar usando esos precios).
+- Ejemplos:
+    'crea un excel con 40% AAPL y 60% MSFT desde 2022-01-01'
+        → create_portfolio_excel(tickers=['AAPL','MSFT'], weights=[0.4,0.6], start_date='2022-01-01')
+    (luego) 'ahora analiza ese portafolio'
+        → analyze_existing_portfolio(excel_path='resultados/mi_portafolio.xlsx', optimize=false)"""
 
 
 class OllamaAgent:
