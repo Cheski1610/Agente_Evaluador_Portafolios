@@ -16,7 +16,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.web_utils import capture_output
-from src.data import create_portfolio_excel, default_date_range
+from src.data import create_portfolio_excel, default_date_range, compute_returns
 
 st.set_page_config(page_title="Crear Excel", page_icon="🧾", layout="wide")
 st.title("🧾 Crear Excel de portafolio")
@@ -91,7 +91,12 @@ if result:
     ).sort_values("Peso (%)", ascending=False)
     st.dataframe(comp_df, use_container_width=True)
 
-    st.line_chart(result["prices"])
+    returns = compute_returns(result["prices"])
+    rolling_cum_returns = (
+        (1 + returns).rolling(window=21).apply(lambda x: x.prod(), raw=True) - 1
+    ).dropna() * 100
+    st.caption("Retorno acumulado en ventanas móviles de 21 días (~1 mes), en %")
+    st.line_chart(rolling_cum_returns)
 
     st.download_button(
         f"Descargar {result['generated_path'].name}",

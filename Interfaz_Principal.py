@@ -29,14 +29,14 @@ st.markdown(
 - **📈 Optimizar Tickers** — Descarga precios de Yahoo Finance para una lista
   de tickers y calcula el portafolio óptimo (Sharpe, mínima varianza, máximo
   retorno o utilidad).
-- **📁 Analizar Excel** — Sube un Excel propio con hoja `Precios` (y
+- **📁 Analizar Portafolio** — Sube un Excel propio con hoja `Precios` (y
   opcionalmente `Pesos`) para analizar un portafolio existente u optimizarlo
   usando esos precios.
-- **🧾 Crear Excel** — Genera un archivo Excel con hojas `Precios`/`Pesos` a
+- **🧾 Crear Portafolio** — Genera un archivo Excel con hojas `Precios`/`Pesos` a
   partir de una composición de portafolio (ticker + peso) que definas, listo
-  para usarse luego en "Analizar Excel".
+  para usarse luego en "Analizar Portafolio".
 - **💬 Chat** — Conversa con el agente vía lenguaje natural (requiere
-  [Ollama](https://ollama.com) corriendo localmente con el modelo `qwen3.5`).
+  [Ollama](https://ollama.com) corriendo localmente con el modelo `qwen3.5` o personalizable con otros modelos y despliegues de Ollama en la nube).
 """
 )
 

@@ -602,8 +602,8 @@ menú de la izquierda permite navegar entre las pantallas.
 | Pantalla | Archivo | Equivalente en CLI |
 |---|---|---|
 | 📈 **Optimizar Tickers** | `pages/1_Optimizar_Tickers.py` | `agent.py --tickers ...` |
-| 📁 **Analizar Excel** | `pages/2_Analizar_Excel.py` | `agent.py --portfolio-excel ...` (con o sin `--optimize`) |
-| 🧾 **Crear Excel** | `pages/3_Crear_Excel.py` | `agent.py --create-portfolio-excel ...` |
+| 📁 **Analizar Portafolio** | `pages/2_Analizar_Portafolio.py` | `agent.py --portfolio-excel ...` (con o sin `--optimize`) |
+| 🧾 **Crear Portafolio** | `pages/3_Crear_Portafolio.py` | `agent.py --create-portfolio-excel ...` |
 | 💬 **Chat** | `pages/4_Chat.py` | `chat.py` |
 
 - **Optimizar Tickers**: ingresa una lista de tickers y un rango de fechas para
@@ -611,15 +611,20 @@ menú de la izquierda permite navegar entre las pantallas.
   los pesos, métricas anualizadas, el gráfico de composición/frontera eficiente
   y el reporte visual de Riskfolio, con botones de descarga para los archivos
   Excel generados.
-- **Analizar Excel**: sube tu propio Excel (hoja `Precios` y, opcionalmente,
-  `Pesos`) para analizar un portafolio existente tal cual o para optimizarlo
-  usando esos precios históricos.
-- **Crear Excel**: define una composición de portafolio (ticker + peso) en una
-  tabla editable y genera un Excel con hojas `Precios`/`Pesos`, listo para
-  subirlo luego en "Analizar Excel".
+- **Analizar Portafolio**: sube tu propio Excel (hoja `Precios` y,
+  opcionalmente, `Pesos`) para analizar un portafolio existente tal cual o
+  para optimizarlo usando esos precios históricos.
+- **Crear Portafolio**: define una composición de portafolio (ticker + peso)
+  en una tabla editable y genera un Excel con hojas `Precios`/`Pesos`, listo
+  para subirlo luego en "Analizar Portafolio". El gráfico de confirmación
+  muestra el retorno acumulado en ventanas móviles de 21 días (~1 mes) en vez
+  de precios crudos, para que instrumentos con niveles de precio muy distintos
+  se puedan comparar en la misma escala.
 - **Chat**: conversa en lenguaje natural con el mismo agente de `chat.py`.
   **Requiere Ollama corriendo localmente** (`http://localhost:11434` por
-  defecto) con el modelo **`qwen3.5`** instalado (ver [Requisitos](#requisitos)).
+  defecto, o un servidor/modelo personalizado configurable en la propia
+  pantalla) con el modelo **`qwen3.5`** instalado (ver
+  [Requisitos](#requisitos)).
 
 ---
 

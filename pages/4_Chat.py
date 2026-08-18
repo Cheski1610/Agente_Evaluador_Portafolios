@@ -18,7 +18,7 @@ st.set_page_config(page_title="Chat", page_icon="💬", layout="wide")
 st.title("💬 Chat conversacional")
 st.caption(
     "Conversa en lenguaje natural con el agente. Requiere Ollama corriendo "
-    "localmente con el modelo configurado."
+    "localmente con el modelo configurado o desplegado en la nube (runpod)."
 )
 
 with st.sidebar:
