@@ -16,8 +16,9 @@ Herramienta para optimización de portafolios financieros con el modelo **Mean-V
      - [Submodo analizar](#submodo-analizar)
      - [Submodo optimizar](#submodo-optimizar)
 5. [Uso con LLM — Agente conversacional (`chat.py`)](#uso-con-llm--agente-conversacional-chatpy)
-6. [Módulos internos](#módulos-internos)
-7. [Referencia de parámetros](#referencia-de-parámetros)
+6. [Interfaz web (Streamlit)](#interfaz-web-streamlit)
+7. [Módulos internos](#módulos-internos)
+8. [Referencia de parámetros](#referencia-de-parámetros)
 
 ---
 
@@ -577,6 +578,53 @@ Con `optimize=true` — optimiza usando los precios del Excel, genera los 4 arch
 - Descarga los precios históricos de Yahoo Finance para el período indicado (default: últimos 3 años).
 - Si los pesos no suman 1, se normalizan automáticamente.
 - Genera un `.xlsx` (default: `resultados/mi_portafolio.xlsx`) con las hojas `Precios` y `Pesos`, listo para encadenar con `analyze_existing_portfolio` usando ese mismo archivo como `excel_path`.
+
+---
+
+## Interfaz web (Streamlit)
+
+Además de la CLI y el chat de terminal, el proyecto incluye una interfaz web con
+**Streamlit** que expone las mismas capacidades en 4 pantallas, con los
+resultados (tablas, métricas, gráficos y reportes) embebidos directamente en la
+app además de guardarse en `resultados/` como siempre.
+
+### Iniciar la app
+
+```bash
+streamlit run Interfaz_Principal.py
+```
+
+Esto abre la app en el navegador (por defecto en `http://localhost:8501`). El
+menú de la izquierda permite navegar entre las pantallas.
+
+### Pantallas disponibles
+
+| Pantalla | Archivo | Equivalente en CLI |
+|---|---|---|
+| 📈 **Optimizar Tickers** | `pages/1_Optimizar_Tickers.py` | `agent.py --tickers ...` |
+| 📁 **Analizar Portafolio** | `pages/2_Analizar_Portafolio.py` | `agent.py --portfolio-excel ...` (con o sin `--optimize`) |
+| 🧾 **Crear Portafolio** | `pages/3_Crear_Portafolio.py` | `agent.py --create-portfolio-excel ...` |
+| 💬 **Chat** | `pages/4_Chat.py` | `chat.py` |
+
+- **Optimizar Tickers**: ingresa una lista de tickers y un rango de fechas para
+  descargar precios de Yahoo Finance y calcular el portafolio óptimo. Muestra
+  los pesos, métricas anualizadas, el gráfico de composición/frontera eficiente
+  y el reporte visual de Riskfolio, con botones de descarga para los archivos
+  Excel generados.
+- **Analizar Portafolio**: sube tu propio Excel (hoja `Precios` y,
+  opcionalmente, `Pesos`) para analizar un portafolio existente tal cual o
+  para optimizarlo usando esos precios históricos.
+- **Crear Portafolio**: define una composición de portafolio (ticker + peso)
+  en una tabla editable y genera un Excel con hojas `Precios`/`Pesos`, listo
+  para subirlo luego en "Analizar Portafolio". El gráfico de confirmación
+  muestra el retorno acumulado en ventanas móviles de 21 días (~1 mes) en vez
+  de precios crudos, para que instrumentos con niveles de precio muy distintos
+  se puedan comparar en la misma escala.
+- **Chat**: conversa en lenguaje natural con el mismo agente de `chat.py`.
+  **Requiere Ollama corriendo localmente** (`http://localhost:11434` por
+  defecto, o un servidor/modelo personalizado configurable en la propia
+  pantalla) con el modelo **`qwen3.5`** instalado (ver
+  [Requisitos](#requisitos)).
 
 ---
 

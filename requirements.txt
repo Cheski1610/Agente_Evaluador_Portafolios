@@ -10,3 +10,4 @@ cvxpy>=1.6.0
 xlsxwriter>=3.2.0
 openpyxl>=3.1.0
 ollama>=0.6.1
+streamlit>=1.38.0
