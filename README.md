@@ -1,6 +1,6 @@
 # Agente de Optimización de Portafolios
 
-Herramienta para optimización de portafolios financieros con el modelo **Mean-Variance de Markowitz**. Descarga precios históricos desde Yahoo Finance, optimiza la asignación de activos con Riskfolio-Lib y ofrece dos formas de interacción: una CLI directa y un agente conversacional impulsado por **qwen3.5** vía Ollama.
+Herramienta para optimización de portafolios financieros con el modelo **Mean-Variance de Markowitz**. Descarga precios históricos desde Yahoo Finance, optimiza la asignación de activos con Riskfolio-Lib y ofrece tres formas de interacción: una CLI directa, un agente conversacional impulsado por **qwen3.5** vía Ollama, y una interfaz web con **Streamlit** que expone las mismas capacidades en 4 pantallas.
 
 ---
 
@@ -28,13 +28,20 @@ Herramienta para optimización de portafolios financieros con el modelo **Mean-V
 Riskfolio/
 ├── agent.py              # CLI de optimización directa (sin LLM)
 ├── chat.py               # Agente conversacional con qwen3.5 vía Ollama
+├── Interfaz_Principal.py # Punto de entrada de la interfaz web (Streamlit)
 ├── requirements.txt      # Dependencias del proyecto
+├── pages/                # Pantallas de la interfaz web (Streamlit)
+│   ├── 1_Optimizar_Tickers.py
+│   ├── 2_Analizar_Portafolio.py
+│   ├── 3_Crear_Portafolio.py
+│   └── 4_Chat.py
 └── src/
     ├── __init__.py
     ├── data.py           # Descarga de precios con yfinance
     ├── optimizer.py      # Optimización Mean-Variance con Riskfolio-Lib
     ├── report.py         # Gráficos y exportación Excel
-    └── llm.py            # Integración con Ollama y definición de herramientas
+    ├── llm.py            # Integración con Ollama y definición de herramientas
+    └── web_utils.py       # Helpers compartidos por las pantallas de Streamlit
 ```
 
 ---
