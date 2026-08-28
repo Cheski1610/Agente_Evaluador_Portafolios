@@ -35,6 +35,38 @@ with st.sidebar:
             st.session_state.agent.reset()
         st.rerun()
 
+    st.divider()
+    st.subheader("Portafolio (Excel)")
+
+    if "uploader_key" not in st.session_state:
+        st.session_state.uploader_key = 0
+
+    uploaded_file = st.file_uploader(
+        "Cargar archivo .xlsx",
+        type=["xlsx"],
+        help=(
+            "Sube un Excel con hojas 'Precios' y/o 'Pesos'. Se hará referencia "
+            "a este archivo en tus próximos mensajes para que el agente lo analice u optimice."
+        ),
+        key=f"excel_uploader_{st.session_state.uploader_key}",
+    )
+
+    if uploaded_file is not None:
+        upload_dir = Path("resultados") / "uploads"
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        saved_path = upload_dir / uploaded_file.name
+        saved_path.write_bytes(uploaded_file.getvalue())
+        st.session_state.uploaded_excel_path = str(saved_path)
+        st.session_state.uploaded_excel_name = uploaded_file.name
+
+    if st.session_state.get("uploaded_excel_path"):
+        st.caption(f"📄 Archivo activo: {st.session_state.uploaded_excel_name}")
+        if st.button("Quitar archivo"):
+            st.session_state.uploaded_excel_path = None
+            st.session_state.uploaded_excel_name = None
+            st.session_state.uploader_key += 1
+            st.rerun()
+
 if "agent" not in st.session_state:
     st.session_state.agent = OllamaAgent(model=model, host=host)
 
@@ -46,10 +78,17 @@ for msg in agent.history:
 user_input = st.chat_input("Escribe tu consulta (ej. 'Optimiza un portafolio con AAPL y MSFT')")
 
 if user_input:
-    st.chat_message("user").write(user_input)
+    message_to_send = user_input
+    if st.session_state.get("uploaded_excel_path"):
+        message_to_send += (
+            f"\n\n📎 Archivo adjunto: {st.session_state.uploaded_excel_name} "
+            f"(ruta: {st.session_state.uploaded_excel_path})"
+        )
+
+    st.chat_message("user").write(message_to_send)
     with st.spinner("Pensando..."):
         try:
-            response = agent.chat(user_input)
+            response = agent.chat(message_to_send)
         except Exception as e:
             st.error(f"No se pudo conectar con Ollama: {e}. Verifica que el servidor esté corriendo en {host}.")
             response = None
