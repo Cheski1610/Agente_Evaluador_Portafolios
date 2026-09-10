@@ -5,6 +5,7 @@ Envuelve OllamaAgent (src/llm.py): mismo flujo de tool-calling que chat.py,
 pero con la conversación embebida en la interfaz web.
 """
 
+import shutil
 import sys
 from pathlib import Path
 
@@ -33,39 +34,10 @@ with st.sidebar:
     if st.button("Reiniciar conversación"):
         if "agent" in st.session_state:
             st.session_state.agent.reset()
+        shutil.rmtree(Path("resultados") / "uploads", ignore_errors=True)
+        st.session_state.uploaded_excel_path = None
+        st.session_state.uploaded_excel_name = None
         st.rerun()
-
-    st.divider()
-    st.subheader("Portafolio (Excel)")
-
-    if "uploader_key" not in st.session_state:
-        st.session_state.uploader_key = 0
-
-    uploaded_file = st.file_uploader(
-        "Cargar archivo .xlsx",
-        type=["xlsx"],
-        help=(
-            "Sube un Excel con hojas 'Precios' y/o 'Pesos'. Se hará referencia "
-            "a este archivo en tus próximos mensajes para que el agente lo analice u optimice."
-        ),
-        key=f"excel_uploader_{st.session_state.uploader_key}",
-    )
-
-    if uploaded_file is not None:
-        upload_dir = Path("resultados") / "uploads"
-        upload_dir.mkdir(parents=True, exist_ok=True)
-        saved_path = upload_dir / uploaded_file.name
-        saved_path.write_bytes(uploaded_file.getvalue())
-        st.session_state.uploaded_excel_path = str(saved_path)
-        st.session_state.uploaded_excel_name = uploaded_file.name
-
-    if st.session_state.get("uploaded_excel_path"):
-        st.caption(f"📄 Archivo activo: {st.session_state.uploaded_excel_name}")
-        if st.button("Quitar archivo"):
-            st.session_state.uploaded_excel_path = None
-            st.session_state.uploaded_excel_name = None
-            st.session_state.uploader_key += 1
-            st.rerun()
 
 if "agent" not in st.session_state:
     st.session_state.agent = OllamaAgent(model=model, host=host)
@@ -75,9 +47,34 @@ agent = st.session_state.agent
 for msg in agent.history:
     st.chat_message(msg["role"]).write(msg["content"])
 
-user_input = st.chat_input("Escribe tu consulta (ej. 'Optimiza un portafolio con AAPL y MSFT')")
+if st.session_state.get("uploaded_excel_path"):
+    col1, col2 = st.columns([0.92, 0.08])
+    col1.caption(f"📄 Archivo activo: {st.session_state.uploaded_excel_name}")
+    if col2.button("✕", key="remove_excel", help="Quitar archivo"):
+        st.session_state.uploaded_excel_path = None
+        st.session_state.uploaded_excel_name = None
+        st.rerun()
 
-if user_input:
+prompt = st.chat_input(
+    "Escribe tu consulta (ej. 'Optimiza un portafolio con AAPL y MSFT')",
+    accept_file=True,
+    file_type=["xlsx"],
+)
+
+if prompt:
+    user_input = prompt.text
+
+    if prompt.files:
+        uploaded_file = prompt.files[0]
+        upload_dir = Path("resultados") / "uploads"
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        saved_path = upload_dir / uploaded_file.name
+        saved_path.write_bytes(uploaded_file.getvalue())
+        st.session_state.uploaded_excel_path = str(saved_path)
+        st.session_state.uploaded_excel_name = uploaded_file.name
+        if not user_input.strip():
+            user_input = f"Analiza el archivo {uploaded_file.name}."
+
     message_to_send = user_input
     if st.session_state.get("uploaded_excel_path"):
         message_to_send += (
